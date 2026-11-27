@@ -2,14 +2,14 @@
 import * as THREE from 'three';
 import { toon, outlineMat } from './textures.js';
 import { CFG } from './config.js';
+import { faceMap, hairMap, dressMap } from './character-art.js';
 
 const COL = {
-  skin: 0xffcfa8, hair: 0x9a5530, dress: 0xff6f86, collar: 0xfff3e0,
-  pad: 0x3fa0ff, shoe: 0x7a5cff, sock: 0xffffff, tie: 0x5fe0a0,
-  cheek: 0xff8fa0, dark: 0x3a2230, tooth: 0xffffff,
+  skin: 0xffd6b4, hair: 0xf5d382, hairLight: 0xffe6a2, hairShade: 0xe8bf6c,
+  ribbon: 0xb84054, cream: 0xffebce, sock: 0xf9e2b9, shoe: 0x994954, sole: 0x673d42,
 };
 const TAU = Math.PI * 2;
-const FACE_R = -0.55, FACE_L = -Math.PI + 0.55; // 3/4 do kamery
+const FACE_R = -0.95, FACE_L = -Math.PI + 0.95; // twarz w trzech czwartych do kamery
 
 function mesh(geo, color, ol = [1.1, 1.1, 1.1], mat) {
   const m = new THREE.Mesh(geo, mat || toon(color));
@@ -20,6 +20,151 @@ function mesh(geo, color, ol = [1.1, 1.1, 1.1], mat) {
     m.add(o);
   }
   return m;
+}
+
+// Zaokrąglone części dzielą siatkę bazową, a obrys skaluje się razem z nimi.
+const ball = new THREE.SphereGeometry(1, 24, 18);
+const softColors = new Map();
+function softMaterial(color) {
+  if (!softColors.has(color)) {
+    softColors.set(color, new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.18 }));
+  }
+  return softColors.get(color);
+}
+
+function oval(parent, color, x, y, z, rx, ry, rz, edge = 0) {
+  const part = mesh(ball, color, edge ? [edge, edge, edge] : null, softMaterial(color));
+  part.position.set(x, y, z);
+  part.scale.set(rx, ry, rz);
+  parent.add(part);
+  return part;
+}
+
+// Zaokrąglone końce na osi stawu zachodzą na siebie również przy zgięciu.
+function limb(parent, profile) {
+  const geo = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 16);
+  parent.add(mesh(geo, COL.skin, null, softMaterial(COL.skin)));
+}
+
+function joint(parent, x, y, z) {
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  parent.add(group);
+  return group;
+}
+
+function hairGeometry() {
+  // Krótsze włosy nad brwią, boczny przedziałek i miękkie pasma przy uszach.
+  const pos = [], uv = [], indices = [];
+  const slices = 72, rows = 20;
+  for (let j = 0; j <= rows + 1; j++) {
+    const t = Math.min(1, j / rows);
+    for (let i = 0; i <= slices; i++) {
+      const a = (i / slices - 0.5) * TAU;
+      const bump = (center, width) => Math.exp(-(((a - center) / width) ** 2));
+      const edge = 1.56 - 0.65 * Math.cos(a) - 0.29 * bump(-0.51, 0.26)
+        + 0.32 * bump(0.24, 0.48) + 0.40 * bump(1.26, 0.34) + 0.49 * bump(-1.20, 0.34);
+      const polar = t * edge;
+      const ridge = 0.025 * Math.cos(9 * a - 2.2 * Math.sin(t * 2.4)) * Math.sin(polar);
+      const radius = (1 + ridge) * (j > rows ? 0.90 : 1);
+      pos.push(-0.012 + radius * 0.231 * Math.sin(polar) * Math.cos(a),
+        0.012 + radius * 0.234 * Math.cos(polar),
+        radius * 0.246 * Math.sin(polar) * Math.sin(a));
+      uv.push(i / slices, 1 - t);
+      if (i < slices && j <= rows) {
+        const n = j * (slices + 1) + i, below = n + slices + 1;
+        indices.push(n, n + 1, below, n + 1, below + 1, below);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setIndex(indices);
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function forelock() {
+  // Kosmyk podniesiony nad przedziałkiem, szeroki u nasady i skręcony na czubku.
+  const geo = ball.clone(), v = geo.attributes.position;
+  for (let i = 0; i < v.count; i++) {
+    const t = (v.getX(i) + 1) / 2;
+    v.setXYZ(i, -0.081 + 0.206 * t,
+      0.211 + 0.046 * Math.sin(t * Math.PI) + 0.039 * t ** 4 + v.getY(i) * 0.033 * (1 - t),
+      -0.035 + 0.030 * Math.sin(t * Math.PI) + v.getZ(i) * 0.060 * (1 - t));
+  }
+  geo.computeVertexNormals();
+  return mesh(geo, COL.hair, null, softMaterial(COL.hair));
+}
+
+function braid(parent, side) {
+  const root = joint(parent, -0.098, 0.016, side * 0.179);
+  // Trzy pasma przeplatają się wzdłuż łuku od ucha do wstążki.
+  const end = new THREE.Vector3(-0.006, -0.207, side * 0.146);
+  const colors = [COL.hair, COL.hairLight, COL.hairShade];
+  colors.forEach((color, strand) => {
+    const points = [];
+    for (let i = 0; i <= 32; i++) {
+      const t = i / 32, wave = t * TAU * 1.35 + strand * TAU / 3;
+      const width = 0.032 * (1 - 0.55 * t);
+      points.push(new THREE.Vector3(end.x * t - 0.035 * Math.sin(t * Math.PI) + width * Math.cos(wave),
+        end.y * t - 0.012 * Math.sin(wave) * (1 - t),
+        end.z * t + side * (0.046 * Math.sin(t * Math.PI) + width * Math.sin(wave))));
+    }
+    const path = new THREE.CatmullRomCurve3(points);
+    const geo = new THREE.TubeGeometry(path, 32, 0.035, 9, false);
+    const verts = geo.attributes.position, v = new THREE.Vector3();
+    for (let i = 0; i <= 32; i++) {
+      const center = path.getPointAt(i / 32);
+      for (let j = 0; j <= 9; j++) {
+        const n = i * 10 + j;
+        v.fromBufferAttribute(verts, n).sub(center).multiplyScalar(1 - 0.48 * i / 32).add(center);
+        verts.setXYZ(n, v.x, v.y, v.z);
+      }
+    }
+    root.add(mesh(geo, color, null));
+  });
+  const tip = oval(root, COL.hair, end.x - 0.011, end.y - 0.034, end.z,
+    0.028, 0.051, 0.025, 1.045);
+  tip.rotation.z = -0.42;
+
+  const bow = joint(root, end.x, end.y, end.z + side * 0.015);
+  bow.rotation.set(0, side > 0 ? 0.43 : Math.PI - 0.43, side * 0.26);
+  bow.scale.setScalar(1.12);
+  const loop = new THREE.Shape();
+  loop.moveTo(0, 0);
+  loop.bezierCurveTo(0.024, 0.031, 0.065, 0.050, 0.067, 0.029);
+  loop.bezierCurveTo(0.074, 0.004, 0.069, -0.021, 0.057, -0.022);
+  loop.quadraticCurveTo(0.033, -0.025, 0, 0);
+  const loops = new THREE.ExtrudeGeometry(loop, { depth: 0.008, bevelEnabled: true,
+    bevelSegments: 2, bevelThickness: 0.004, bevelSize: 0.004, curveSegments: 7 });
+  for (const sign of [-1, 1]) {
+    const wing = mesh(loops, COL.ribbon, null);
+    wing.scale.x = sign;
+    bow.add(wing);
+  }
+  oval(bow, 0xcf5663, 0, 0, 0.006, 0.016, 0.019, 0.012);
+  return { g: root, side };
+}
+
+function makeDress(upper) {
+  // Profil od podszewki do szyi. Zwężenie w talii i fałdy nadają spódnicy kształt w obrocie.
+  const profile = [[0.01, 0.424], [0.176, 0.421], [0.215, 0.433], [0.223, 0.451],
+    [0.215, 0.481], [0.170, 0.59], [0.137, 0.657], [0.143, 0.696],
+    [0.159, 0.779], [0.148, 0.837], [0.084, 0.866], [0.04, 0.862]];
+  const geo = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y - 0.65)), 40);
+  const vertices = geo.attributes.position;
+  for (let i = 0; i < vertices.count; i++) {
+    const x = vertices.getX(i), y = vertices.getY(i), z = vertices.getZ(i);
+    const fold = Math.max(0, -y / 0.23) * 0.045 * Math.cos(8 * Math.atan2(x, z));
+    vertices.setXYZ(i, x * (1 + fold), y, z * (1 + fold));
+  }
+  geo.computeVertexNormals();
+  const dress = mesh(geo, 0xffffff, [1.04, 1.024, 1.04], toon(0xffffff, dressMap()));
+  dress.scale.x = 0.82;
+  dress.position.y = 0.65;
+  upper.add(dress);
 }
 
 function starGeometry() {
@@ -72,103 +217,67 @@ export class Character {
   }
 
   build() {
-    const b = this.body;
-    // nogi (side +1 = bliżej kamery)
     this.legs = {};
     for (const side of [1, -1]) {
-      const hip = new THREE.Group(); hip.position.set(0, 0.5, side * 0.085); b.add(hip);
-      const thigh = mesh(new THREE.CapsuleGeometry(0.058, 0.16, 4, 8), COL.skin, [1.3, 1.12, 1.3]);
-      thigh.position.y = -0.12; hip.add(thigh);
-      const knee = new THREE.Group(); knee.position.y = -0.24; hip.add(knee);
-      const shin = mesh(new THREE.CapsuleGeometry(0.052, 0.14, 4, 8), COL.skin, [1.3, 1.12, 1.3]);
-      shin.position.y = -0.1; knee.add(shin);
-      // nakolannik — wiecznie zsunięty na kostkę
-      const pad = mesh(new THREE.CylinderGeometry(0.072, 0.078, 0.08, 12), COL.pad, [1.15, 1.15, 1.15]);
-      pad.position.set(0.005, -0.165, 0); pad.rotation.z = 0.18; knee.add(pad);
-      const shoe = mesh(new THREE.BoxGeometry(0.17, 0.075, 0.11), COL.shoe, [1.12, 1.25, 1.15]);
-      shoe.position.set(0.035, -0.235, 0); knee.add(shoe);
+      const hip = joint(this.body, 0, 0.50, side * 0.077);
+      limb(hip, [[0, -0.282], [0.028, -0.272], [0.041, -0.253], [0.044, -0.231],
+        [0.049, -0.176], [0.056, -0.114], [0.059, -0.055], [0.048, -0.019], [0, 0.005]]);
+      oval(hip, 0x27686d, 0, -0.045, 0, 0.075, 0.086, 0.067);
+      const knee = joint(hip, 0, -0.24, 0);
+      limb(knee, [[0, -0.187], [0.032, -0.165], [0.040, -0.128], [0.047, -0.080],
+        [0.046, -0.048], [0.044, -0.016], [0.043, 0.002], [0.037, 0.022], [0.022, 0.036], [0, 0.042]]);
+      oval(knee, COL.sock, -0.002, -0.158, 0, 0.05, 0.074, 0.048);
+      oval(knee, COL.cream, 0, -0.118, 0, 0.054, 0.022, 0.051, 1.035);
+      oval(knee, COL.sole, 0.034, -0.239, 0, 0.100, 0.021, 0.061, 1.05);
+      oval(knee, COL.shoe, 0.032, -0.219, 0, 0.099, 0.035, 0.060);
+      const strap = oval(knee, 0xc66964, 0.026, -0.191, 0, 0.022, 0.014, 0.052);
+      strap.rotation.z = -0.18;
       this.legs[side] = { hip, knee };
     }
-    // kręgosłup: górna połowa ciała zgina się w biodrach (do zwijania w kulkę)
-    this.spine = new THREE.Group(); this.spine.position.y = 0.5; b.add(this.spine);
-    const upper = new THREE.Group(); upper.position.y = -0.5; this.spine.add(upper);
-    // sukienka
-    const dress = mesh(new THREE.CylinderGeometry(0.15, 0.25, 0.42, 16), COL.dress, [1.08, 1.04, 1.08]);
-    dress.position.y = 0.66; upper.add(dress);
-    const collar = mesh(new THREE.TorusGeometry(0.12, 0.028, 8, 16), COL.collar, null);
-    collar.rotation.x = Math.PI / 2; collar.position.y = 0.865; upper.add(collar);
-    // kieszonka z cukierkiem
-    const pocket = mesh(new THREE.BoxGeometry(0.06, 0.07, 0.02), 0xffe14d, null);
-    pocket.position.set(0.05, 0.6, 0.2); pocket.rotation.y = 0.5; upper.add(pocket);
 
-    // ręce
+    this.spine = joint(this.body, 0, 0.5, 0);
+    const upper = joint(this.spine, 0, -0.5, 0);
+    makeDress(upper);
+    oval(upper, COL.skin, 0, 0.867, 0, 0.060, 0.070, 0.064);
+
     this.arms = {};
     for (const side of [1, -1]) {
-      const sh = new THREE.Group(); sh.position.set(0, 0.83, side * 0.17); upper.add(sh);
-      const sleeve = mesh(new THREE.SphereGeometry(0.075, 10, 8), COL.dress, [1.15, 1.15, 1.15]);
-      sleeve.position.y = -0.02; sh.add(sleeve);
-      const up = mesh(new THREE.CapsuleGeometry(0.042, 0.11, 4, 8), COL.skin, [1.3, 1.1, 1.3]);
-      up.position.y = -0.09; sh.add(up);
-      const el = new THREE.Group(); el.position.y = -0.17; sh.add(el);
-      const fore = mesh(new THREE.CapsuleGeometry(0.038, 0.09, 4, 8), COL.skin, [1.3, 1.1, 1.3]);
-      fore.position.y = -0.07; el.add(fore);
-      const hand = mesh(new THREE.SphereGeometry(0.052, 10, 8), COL.skin, [1.2, 1.2, 1.2]);
-      hand.position.y = -0.155; el.add(hand);
+      const sh = joint(upper, 0, 0.809, side * 0.144);
+      limb(sh, [[0, -0.198], [0.024, -0.19], [0.034, -0.171], [0.035, -0.15],
+        [0.043, -0.083], [0.046, -0.052], [0.04, -0.026], [0, -0.008]]);
+      const sleeve = oval(sh, COL.cream, 0, -0.019, side * 0.014, 0.074, 0.080, 0.070, 1.045);
+      sleeve.rotation.x = -side * 0.22;
+      oval(sh, 0xefd2a3, 0, -0.069, side * 0.021, 0.051, 0.019, 0.051);
+      const el = joint(sh, 0, -0.167, 0);
+      limb(el, [[0, -0.155], [0.031, -0.143], [0.032, -0.119], [0.037, -0.074],
+        [0.039, -0.049], [0.034, -0.004], [0.029, 0.016], [0.018, 0.029], [0, 0.034]]);
+      oval(el, COL.skin, 0.006, -0.148, 0, 0.047, 0.053, 0.041, 1.05);
+      oval(el, COL.skin, 0.032, -0.142, side * 0.010, 0.021, 0.027, 0.022);
       this.arms[side] = { sh, el };
     }
 
-    // głowa
-    const head = this.head = new THREE.Group();
-    head.position.set(0.01, 1.0, 0); upper.add(head);
-    head.add(mesh(new THREE.SphereGeometry(0.2, 24, 18), COL.skin, [1.06, 1.06, 1.06]));
-    const cap = mesh(new THREE.SphereGeometry(0.214, 24, 16, 0, TAU, 0, Math.PI * 0.52), COL.hair, null);
-    cap.rotation.z = 0.6; cap.position.y = 0.005; head.add(cap);
-    const back = mesh(new THREE.SphereGeometry(0.195, 16, 12), COL.hair, [1.05, 1.05, 1.05]);
-    back.position.set(-0.05, 0.02, 0); head.add(back);
-    // rozczochrana grzywka
-    [-0.11, -0.04, 0.03, 0.1].forEach((z, i) => {
-      const bang = mesh(new THREE.SphereGeometry(0.055, 8, 6), COL.hair, null);
-      bang.position.set(0.12 + (i % 2) * 0.02, 0.14 - (i % 2) * 0.02, z);
-      bang.scale.set(0.7, 1, 1); bang.rotation.z = -0.5 + i * 0.2; head.add(bang);
-    });
-    // kucyki
-    this.pigtails = [];
+    const head = this.head = joint(upper, 0.015, 1.018, 0);
+    this.faces = Object.fromEntries(['smile', 'blink', 'sad', 'surprise'].map(mood => [mood, faceMap(mood)]));
+    this.faceMaterial = new THREE.MeshLambertMaterial({ map: this.faces.smile,
+      emissive: 0xffffff, emissiveMap: this.faces.smile, emissiveIntensity: 0.18 });
+    const geo = new THREE.SphereGeometry(1, 48, 36);
+    const vertices = geo.attributes.position;
+    for (let i = 0; i < vertices.count; i++) {
+      const y = vertices.getY(i), z = vertices.getZ(i);
+      // Pełne policzki, łagodnie zwężający się podbródek.
+      const jaw = 1 - 0.19 * Math.max(0, -y);
+      vertices.setXYZ(i, vertices.getX(i) * 0.207 * jaw, y * 0.208, z * 0.228 * jaw);
+    }
+    geo.computeVertexNormals();
+    head.add(mesh(geo, 0xffffff, [1.03, 1.03, 1.03], this.faceMaterial));
+    oval(head, 0xf9bda2, 0.204, -0.023, 0, 0.028, 0.025, 0.033);
     for (const side of [1, -1]) {
-      const g = new THREE.Group(); g.position.set(-0.06, 0.08, side * 0.17); head.add(g);
-      g.add(mesh(new THREE.SphereGeometry(0.04, 8, 6), COL.tie, [1.2, 1.2, 1.2]));
-      const tuft = mesh(new THREE.SphereGeometry(0.085, 12, 10), COL.hair, [1.12, 1.12, 1.12]);
-      tuft.scale.set(1.5, 0.75, 0.85); tuft.position.set(-0.06, 0.05, side * 0.08); tuft.rotation.z = 0.7;
-      tuft.rotation.y = side * 0.5;
-      g.add(tuft);
-      for (let k = 0; k < 2; k++) {
-        const stray = mesh(new THREE.ConeGeometry(0.02, 0.1, 5), COL.hair, null);
-        stray.position.set(-0.13 + k * 0.03, 0.1 + k * 0.03, side * (0.1 + k * 0.03));
-        stray.rotation.z = 0.6 + k * 0.6; g.add(stray);
-      }
-      this.pigtails.push({ g, side });
+      oval(head, COL.skin, -0.015, -0.025, side * 0.215, 0.040, 0.054, 0.029, 1.045);
+      oval(head, 0xf0b097, -0.013, -0.025, side * 0.238, 0.021, 0.030, 0.009);
     }
-    // twarz
-    for (const side of [1, -1]) {
-      const eye = mesh(new THREE.SphereGeometry(0.03, 10, 8), COL.dark, null);
-      eye.position.set(0.172, 0.035, side * 0.075); eye.scale.set(0.7, 1.15, 1); head.add(eye);
-      const hl = mesh(new THREE.SphereGeometry(0.01, 6, 4), 0xffffff, null, new THREE.MeshBasicMaterial({ color: 0xffffff }));
-      hl.position.set(0.195, 0.05, side * 0.07); head.add(hl);
-      const brow = mesh(new THREE.BoxGeometry(0.012, 0.014, 0.055), COL.hair, null);
-      brow.position.set(0.185, 0.1, side * 0.075); brow.rotation.x = side * 0.25; head.add(brow);
-      const cheek = mesh(new THREE.SphereGeometry(0.04, 8, 6), COL.cheek, null);
-      cheek.position.set(0.158, -0.05, side * 0.12); cheek.scale.set(0.35, 0.6, 1); head.add(cheek);
-    }
-    const nose = mesh(new THREE.SphereGeometry(0.026, 8, 6), 0xffb48c, null);
-    nose.position.set(0.2, -0.01, 0); head.add(nose);
-    // uśmiech z dziurą po zębie
-    const mg = new THREE.Group(); mg.position.set(0.186, -0.075, 0); mg.rotation.y = Math.PI / 2; head.add(mg);
-    const mouth = new THREE.Mesh(new THREE.CircleGeometry(0.055, 16, Math.PI, Math.PI), new THREE.MeshBasicMaterial({ color: 0x7a2030 }));
-    mg.add(mouth);
-    const toothMat = new THREE.MeshBasicMaterial({ color: COL.tooth });
-    for (const x of [-0.038, -0.013, 0.038]) { // brak zęba na +0.013 :)
-      const t = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.024, 0.01), toothMat);
-      t.position.set(x, -0.012, 0.004); mg.add(t);
-    }
+    head.add(mesh(hairGeometry(), 0xffffff, [1.025, 1.025, 1.025], toon(0xffffff, hairMap())));
+    head.add(forelock());
+    this.pigtails = [braid(head, 1), braid(head, -1)];
   }
 
   onState(st, prev) {
@@ -230,7 +339,7 @@ export class Character {
           tuck(); scale = 0.95; k = 30;
         } else if (p.vy > 0) {
           T.hipL = 0.9; T.kneeL = -1.3; T.hipR = -0.35; T.kneeR = -0.5;
-          T.armL = 2.7; T.armR = 2.3; T.elbowL = T.elbowR = 0.2; T.armLx = -0.3; T.armRx = 0.3;
+          T.armL = 2.7; T.armR = 2.3; T.elbowL = T.elbowR = 0.2; T.armLx = 0.68; T.armRx = -0.65;
           T.head = 0.15;
         } else {
           T.hipL = 0.4; T.kneeL = -0.6; T.hipR = 0.1; T.kneeR = -0.3;
@@ -265,7 +374,7 @@ export class Character {
         break;
       case 'won':
         bob = Math.abs(Math.sin(this.t * 9)) * 0.25;
-        T.armL = T.armR = 2.9; T.armLx = -0.5; T.armRx = 0.5; T.hipL = 0.3; T.kneeL = -0.6;
+        T.armL = T.armR = 2.9; T.armLx = 0.86; T.armRx = -0.86; T.hipL = 0.3; T.kneeL = -0.6;
         T.head = 0.25;
         break;
     }
@@ -286,6 +395,12 @@ export class Character {
     this.arms[1].el.rotation.z = P.elbowL;
     this.arms[-1].el.rotation.z = P.elbowR;
     this.head.rotation.set(P.headX, 0, P.head);
+    const blinkTime = this.t % 3.9;
+    const eyesClosed = blinkTime > 3.72 || st === 'bored';
+    let face = eyesClosed ? this.faces.blink : this.faces.smile;
+    if (st === 'cry') face = this.faces.sad;
+    if (st === 'stun') face = this.faces.surprise;
+    this.faceMaterial.map = this.faceMaterial.emissiveMap = face;
     this.spine.rotation.z = P.spine;
     this.body.rotation.z = P.lean;
 
@@ -331,13 +446,13 @@ export class Character {
 
     this.root.position.set(rx, ry + this.carry, 0);
 
-    // kucyki na sprężynce
+    // Warkocze podążają z opóźnieniem za skokiem i odbiciem od podłogi.
     const force = -p.vy * 0.04 + (st === 'normal' && p.onGround ? Math.sin(this.phase * 2) * speed * 0.03 : 0);
     this.pigV += (force - this.pig) * 120 * dt - this.pigV * 8 * dt;
     this.pig += this.pigV * dt;
     for (const { g, side } of this.pigtails) {
-      g.rotation.z = THREE.MathUtils.clamp(this.pig, -0.9, 0.9);
-      g.rotation.x = side * (0.2 + Math.abs(this.pig) * 0.4);
+      g.rotation.z = -THREE.MathUtils.clamp(this.pig, -0.68, 0.68);
+      g.rotation.x = -side * (0.08 + Math.abs(this.pig) * 0.32);
     }
 
     // gwiazdki nad głową
