@@ -68,6 +68,16 @@ function starGeometry() {
   return g;
 }
 
+// które fragmenty klipów Mixamo grają w których stanach (ułamki długości klipu)
+const CLIP = {
+  roll: [0.14, 0.85], rollLoop: [0.3, 0.72], rollScale: 0.9,
+  cart: [0.28, 0.72],
+  flip: [0.35, 0.8],
+  rise: [0.3, 0.43], fall: [0.45, 0.6],
+};
+const LOW_PTS = [['LeftToeBase', 0.03], ['RightToeBase', 0.03], ['LeftFoot', 0.05], ['RightFoot', 0.05], ['Hips', 0.12],
+  ['Spine01', 0.13], ['Spine', 0.13], ['Head', 0.2], ['head_end', 0.08], ['LeftHand', 0.04], ['RightHand', 0.04],
+  ['LeftLeg', 0.06], ['RightLeg', 0.06]];
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion();
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _m = new THREE.Matrix4();
 const lerp = (a, b, k) => a + (b - a) * k;
@@ -105,18 +115,26 @@ export class Character {
     this.childDir = {};
     for (const [b, c] of Object.entries(AIM_CHILD)) this.childDir[b] = this.bones[c].position.clone().normalize();
 
-    // animacja chodu bez przesuwania się (root motion out)
-    const clip = gltf.animations[0].clone();
-    for (const t of clip.tracks) {
-      if (/^(Hips|Armature)\.position$/.test(t.name)) {
-        const vals = t.values;
-        for (let i = 3; i < vals.length; i += 3) { vals[i] = vals[0]; vals[i + 2] = vals[2]; }
-      }
-    }
+    // klipy z konwertera (tools/convert-model.html): walk, run, jump, fall, roll, cartwheel,
+    // flip, idle, stun, cry, bored, win, skid. Brakujące zastępują pozy z kości.
     this.mixer = new THREE.AnimationMixer(this.model);
-    this.walk = this.mixer.clipAction(clip);
-    this.walk.play();
-    this.clipLen = clip.duration;
+    this.actions = {};
+    this.weights = {};
+    for (const src of gltf.animations) {
+      const clip = src.clone();
+      for (const t of clip.tracks) {
+        if (/^(Hips|Armature)\.position$/.test(t.name)) { // bez przesuwania się (in place)
+          const vals = t.values;
+          for (let i = 3; i < vals.length; i += 3) { vals[i] = vals[0]; vals[i + 2] = vals[2]; }
+        }
+      }
+      const a = this.mixer.clipAction(clip);
+      a.play();
+      a.setEffectiveWeight(0);
+      this.actions[clip.name] = a;
+      this.weights[clip.name] = 0;
+    }
+    this.role = null;
 
     // aktualne (wygładzone) kierunki kości
     this.dirs = {};
@@ -202,12 +220,16 @@ export class Character {
     const pts = [hips, head, top, lk, rk, lf, rf];
     const c = pts.reduce((a, b) => a.add(b), new THREE.Vector3()).multiplyScalar(1 / pts.length);
     let r = 0; for (const q of pts) r = Math.max(r, q.distanceTo(c));
-    return { foot, hips, center: c, radius: r };
+    // najniższa powierzchnia ciała: kość minus przybliżona grubość w tym miejscu
+    let lowest = Infinity;
+    for (const [n, th] of LOW_PTS) lowest = Math.min(lowest, p(n).y - th);
+    return { foot, hips, center: c, radius: r, lowest };
   }
 
   update(dt, p, rx = p.x, ry = p.y) {
     this.t += dt;
     const st = p.state, speed = Math.abs(p.vx);
+    this.rollT = st === 'roll' ? (this.prevState === 'roll' ? this.rollT + dt : 0) : 0;
     if (st !== this.prevState) {
       if (st === 'cart') this.spinBase = Math.round(this.spin / TAU) * TAU;
       if (st === 'roll' || this.prevState === 'roll') this.squash = st === 'roll' ? 0.6 : -0.6;
@@ -218,6 +240,9 @@ export class Character {
 
     let P = POSES.idle, run = false, mode = 'feet', scale = 1, face = p.facing > 0 ? FACE_R : FACE_L;
     let lift = 0, wobble = 0, pivotY = 0;
+    // klip animacji dla stanu: role = nazwa klipu, scrub = 0..1 (czas sterowany fizyką), ts = tempo
+    const has = (r) => !!this.actions[r];
+    let role = null, scrub = null, ts = 1, clipSpin = false;
     if (this.carry > 0) { P = POSES.carried; mode = 'air'; }
     else if (st === 'roll') { P = POSES.tuck; mode = 'ball'; scale = 0.9; }
     else if (st === 'cart') { P = POSES.star; mode = 'cart'; face = 0; pivotY = 0.72; }
@@ -229,12 +254,57 @@ export class Character {
     } else if (p.skid) { P = POSES.skid; wobble = 0.35; }
     else if (speed > 0.3) { run = true; }
 
-    // klip chodu → bieg (tempo rośnie z prędkością)
-    this.walk.timeScale = run ? Math.min(3.4, 0.9 + speed * 0.3) : 0.25;
+    if (this.carry > 0) role = has('carried') ? 'carried' : null;
+    else if (st === 'roll' && has('roll')) {
+      // fikołek: właściwy przewrót to środek klipu; przedłużony (pod meblem) zapętla jego rdzeń
+      const k = this.rollT / CFG.rollTime;
+      scrub = k < 1 ? CLIP.roll[0] + (CLIP.roll[1] - CLIP.roll[0]) * k
+        : CLIP.rollLoop[0] + ((k - 1) % 0.6) / 0.6 * (CLIP.rollLoop[1] - CLIP.rollLoop[0]);
+      role = 'roll'; clipSpin = true; mode = 'lowest'; scale = CLIP.rollScale;
+    }
+    else if (st === 'cart' && has('cartwheel')) {
+      const k = 1 - Math.max(0, p.cartT) / CFG.cartTime;
+      role = 'cartwheel'; scrub = CLIP.cart[0] + (CLIP.cart[1] - CLIP.cart[0]) * k;
+      clipSpin = true; mode = 'lowest'; pivotY = 0;
+      face = p.facing > 0 ? Math.PI / 2 : -Math.PI / 2; // koło w płaszczyźnie ekranu
+    }
+    else if (st === 'normal' && p.saltoT > 0 && has('flip')) {
+      const k = 1 - p.saltoT / CFG.saltoTime;
+      role = 'flip'; scrub = CLIP.flip[0] + (CLIP.flip[1] - CLIP.flip[0]) * k;
+      clipSpin = true; mode = 'hips'; pivotY = 0;
+    }
+    else if ((st === 'stun' || st === 'cry' || st === 'bored') && has(st)) { role = st; mode = 'feet'; } // klipy Mixamo są na stojąco
+    else if (st === 'won' && has('win')) { role = 'win'; lift = 0; }
+    else if (st === 'normal' && !p.onGround && p.saltoT <= 0) {
+      if (p.vy > 0 && has('jump')) { role = 'jump'; scrub = CLIP.rise[0] + (CLIP.rise[1] - CLIP.rise[0]) * THREE.MathUtils.clamp(1 - p.vy / CFG.jumpVel, 0, 1); }
+      else if (has('fall')) role = 'fall';
+      else if (has('jump')) { role = 'jump'; scrub = CLIP.fall[0] + (CLIP.fall[1] - CLIP.fall[0]) * THREE.MathUtils.clamp(-p.vy / 12, 0, 1); }
+    }
+    else if (st === 'normal' && p.onGround && p.skid && has('skid')) role = 'skid';
+    else if (run) {
+      if (has('run')) { role = 'run'; ts = THREE.MathUtils.clamp(speed / CFG.baseMaxSpeed, 0.6, 2.2); }
+      else if (has('walk')) { role = 'walk'; ts = Math.min(3.4, 0.9 + speed * 0.3); }
+    }
+    else if (st === 'normal' && p.onGround && has('idle')) role = 'idle';
+
+    // wagi klipów (płynne przejścia)
+    if (role !== this.role) {
+      if (role && scrub === null && role !== 'run' && role !== 'walk') this.actions[role].reset().play();
+      this.role = role;
+    }
+    const kw = 1 - Math.exp(-12 * dt);
+    for (const [name, a] of Object.entries(this.actions)) {
+      this.weights[name] = lerp(this.weights[name], name === role ? 1 : 0, kw);
+      a.setEffectiveWeight(this.weights[name]);
+      if (name === role) {
+        if (scrub !== null) { a.timeScale = 0; a.time = THREE.MathUtils.clamp(scrub, 0, 0.999) * a.getClip().duration; }
+        else a.timeScale = ts;
+      }
+    }
     this.mixer.update(dt);
-    this.procW = lerp(this.procW, run ? 0 : 1, 1 - Math.exp(-14 * dt));
+    this.procW = lerp(this.procW, role ? 0 : 1, 1 - Math.exp(-14 * dt));
     this.applyPose(P, this.procW, false, dt, wobble);
-    if (run) { // pochylenie w biegu
+    if (run && (role === 'walk' || role === 'run')) { // pochylenie w biegu
       const lean = 0.12 + 0.25 * Math.min(1, speed / 10);
       const b = this.bones.Spine02;
       const pq = this.modelQuat(b.parent, _q);
@@ -243,7 +313,9 @@ export class Character {
     }
 
     // obroty całego ciała
-    if (st === 'roll') {
+    if (clipSpin) {
+      this.spin = lerp(this.spin, Math.round(this.spin / TAU) * TAU, 1 - Math.exp(-14 * dt));
+    } else if (st === 'roll') {
       this.spin += -p.facing * (Math.max(speed, 3) / (BALL_R * this.scale)) * dt;
     } else if (st === 'cart') {
       this.spin = this.spinBase - p.facing * TAU * (1 - Math.max(0, p.cartT) / CFG.cartTime);
@@ -273,6 +345,12 @@ export class Character {
       pivotY = pivotY || BALL_R * this.scale;
     } else if (mode === 'cart') {
       tgt.copy(m.hips).negate();
+    } else if (mode === 'hips') {
+      // salto z klipu: biodra zostają na swojej wysokości, ciało kręci się wokół nich
+      tgt.set(-this.hipsRest.x, this.hipsRest.y - m.hips.y, -this.hipsRest.z);
+    } else if (mode === 'lowest') {
+      // klip sam obraca ciało: kładziemy najniższy punkt na podłodze
+      tgt.set(-this.hipsRest.x, -m.lowest, -this.hipsRest.z);
     } else {
       // stopy (albo pupa przy siedzeniu) na wysokości punktu fizyki
       tgt.set(-this.hipsRest.x, mode === 'sit' ? 0.1 - m.hips.y : this.footRest - m.foot, -this.hipsRest.z);

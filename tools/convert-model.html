@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>Konwerter postaci</title>
+  <script type="importmap">
+    { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    } }
+  </script>
+  <style>
+    body { margin: 0; font: 15px system-ui, sans-serif; display: grid; grid-template-columns: 340px 1fr; height: 100vh; background: #f7efe2; color: #3d2c3a; }
+    aside { padding: 14px; overflow: auto; border-right: 2px solid #3d2c3a22; }
+    h1 { font-size: 18px; margin: 0 0 6px; }
+    code { background: #fff; padding: 0 4px; border-radius: 4px; }
+    button { font: inherit; margin: 2px 0; padding: 4px 10px; border-radius: 8px; border: 2px solid #3d2c3a; background: #fff; cursor: pointer; }
+    button.main { background: #ffd84d; font-weight: bold; width: 100%; margin-top: 10px; }
+    .clip { display: flex; justify-content: space-between; align-items: center; gap: 6px; border-bottom: 1px dashed #3d2c3a33; padding: 3px 0; }
+    .clip small { color: #8a7a84; }
+    .warn { color: #c0392b; }
+    #log { white-space: pre-wrap; font-size: 12px; color: #6a5a64; margin-top: 10px; }
+    canvas { width: 100%; height: 100%; display: block; }
+  </style>
+</head>
+<body>
+<aside>
+  <h1>Konwerter postaci → <code>src/art/girl.glb</code></h1>
+  <p>Model: <code>tools/model-src/girl.fbx</code><br>Animacje: wszystkie <code>.fbx</code> z <code>tools/model-src/anims/</code></p>
+  <div id="clips">ładowanie…</div>
+  <button class="main" id="dl" disabled>Pobierz girl.glb</button>
+  <div id="log"></div>
+</aside>
+<main><canvas id="view"></canvas></main>
+<script type="module">
+// Narzędzie deweloperskie (nie trafia na stronę): FBX z Meshy + animacje z Mixamo → jeden lekki GLB.
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { retargetClip, roleFromFile } from './retarget.js';
+
+const log = (s) => { document.getElementById('log').textContent += s + '\n'; };
+const loader = new FBXLoader();
+
+// --- model docelowy ---
+const target = await loader.loadAsync('model-src/girl.fbx');
+target.updateMatrixWorld(true);
+
+// --- lista animacji ---
+const listing = await (await fetch('model-src/anims/', { cache: 'no-store' })).text();
+const files = [...listing.matchAll(/href="([^"]+\.fbx)"/gi)].map((m) => decodeURIComponent(m[1]));
+const clips = [];
+const used = new Set();
+
+async function addClip(source, clip, role, label) {
+  if (used.has(role)) { log(`pomijam ${label}: rola „${role}” już jest`); return; }
+  const out = retargetClip(target, source, clip, { name: role });
+  used.add(role);
+  clips.push(out);
+  log(`${role} ← ${label} (${out.duration.toFixed(2)} s)` + (out.userData.missing.length ? `  brak kości: ${out.userData.missing.join(', ')}` : ''));
+}
+
+for (const f of files) {
+  try {
+    const src = await loader.loadAsync('model-src/anims/' + encodeURIComponent(f));
+    if (!src.animations.length) { log(`⚠ ${f}: brak animacji`); continue; }
+    await addClip(src, src.animations[0], roleFromFile(f), f);
+  } catch (e) { log(`⚠ ${f}: ${e.message}`); }
+}
+// chód z oryginalnego pliku Meshy (jeśli nie ma lepszego)
+if (target.animations[0] && !used.has('walk')) {
+  const src = await loader.loadAsync('model-src/girl.fbx'); // osobna kopia — źródło nie może być celem
+  await addClip(src, src.animations[0], 'walk', 'girl.fbx');
+}
+
+// --- podgląd ---
+const canvas = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xfff8ea);
+const camera = new THREE.PerspectiveCamera(35, 1, 1, 5000);
+camera.position.set(260, 140, 320);
+const controls = new OrbitControls(camera, canvas); controls.target.set(0, 80, 0); controls.update();
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb59a8a, 2.5));
+scene.add(new THREE.GridHelper(400, 8, 0xcbb9a8, 0xe5d6c6));
+scene.add(target);
+const mixer = new THREE.AnimationMixer(target);
+let current = null;
+function play(clip) {
+  if (current) current.stop();
+  current = mixer.clipAction(clip); current.reset().play();
+}
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => { mixer.update(clock.getDelta()); renderer.render(scene, camera); });
+
+const box = document.getElementById('clips');
+box.innerHTML = clips.length ? '' : '<p class="warn">Brak animacji.</p>';
+for (const c of clips) {
+  const row = document.createElement('div'); row.className = 'clip';
+  row.innerHTML = `<span><b>${c.name}</b> <small>${c.duration.toFixed(2)} s</small>${c.userData.missing.length ? ' <span class="warn">⚠</span>' : ''}</span>`;
+  const b = document.createElement('button'); b.textContent = '▶'; b.onclick = () => play(c);
+  row.appendChild(b); box.appendChild(row);
+}
+if (clips[0]) play(clips[0]);
+
+// --- eksport ---
+async function exportGLB() {
+  if (current) current.stop();
+  mixer.stopAllAction();
+  const tex = await new THREE.TextureLoader().loadAsync('model-src/girl_base_1k.jpg');
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.userData.mimeType = 'image/jpeg'; // bez tego eksporter przepisuje teksturę do ciężkiego PNG
+  // flipY zostaje domyślne — GLTFExporter sam odwraca obraz do konwencji glTF
+  const copy = SkeletonUtils.clone(target);
+  copy.traverse((o) => {
+    if (!o.isMesh) return;
+    const g = o.geometry.clone();
+    g.deleteAttribute('normal');
+    const merged = mergeVertices(g, 1e-4); // FBX przychodzi bez indeksów
+    merged.computeVertexNormals();
+    o.geometry = merged;
+    o.material = new THREE.MeshStandardMaterial({ name: 'girl', map: tex, roughness: 1, metalness: 0 });
+  });
+  copy.animations = [];
+  return new GLTFExporter().parseAsync(copy, { binary: true, animations: clips });
+}
+window.exportGLB = exportGLB;
+window.CLIPS = clips;
+window.TARGET = target;
+// klatka klipu do obrazka (podgląd/kontrola jakości)
+window.frameAt = (clip, t, cam = [260, 140, 320]) => {
+  mixer.stopAllAction();
+  const a = mixer.clipAction(clip); a.reset().play(); a.paused = true; a.time = t;
+  mixer.update(0);
+  camera.position.set(...cam); controls.update();
+  renderer.render(scene, camera);
+  return canvas.toDataURL('image/jpeg', 0.75);
+};
+const dl = document.getElementById('dl');
+dl.disabled = false;
+dl.onclick = async () => {
+  dl.disabled = true; dl.textContent = 'eksport…';
+  const glb = await exportGLB();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([glb], { type: 'model/gltf-binary' }));
+  a.download = 'girl.glb'; a.click();
+  dl.disabled = false; dl.textContent = `Pobierz girl.glb (${(glb.byteLength / 1e6).toFixed(2)} MB)`;
+  log('zapisz plik jako src/art/girl.glb');
+};
+window.READY = true;
+</script>
+</body>
+</html>
