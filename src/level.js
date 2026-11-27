@@ -105,7 +105,7 @@ export function buildLevel(scene) {
   }
 
   // ---------- meble ----------
-  function table(x, w, { top = 1.0, thick = 0.18, color = 0xc08552, d = 2.4, things = true } = {}) {
+  function table(x, w, { top = 1.15, thick = 0.18, color = 0xc08552, d = 2.4, things = true } = {}) {
     solid(x, top, w, thick, 'edge', { name: 'stół' });
     box(w, thick, d, color, x + w / 2, top + thick / 2, 0, { rep: 1.2 });
     for (const lx of [x + 0.25, x + w - 0.25]) for (const lz of [-d / 2 + 0.25, d / 2 - 0.25]) cyl(0.08, top, 0x8d5a34, lx, top / 2, lz, { r2: 0.09 });
@@ -132,7 +132,7 @@ export function buildLevel(scene) {
     const s = (r, px, py, pz) => { const m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 10), toon(bc)); m.position.set(px, py, pz); const o = new THREE.Mesh(m.geometry, outlineMat); o.scale.setScalar(1.1); m.add(o); bear.add(m); };
     s(0.28, 0, 0, 0); s(0.2, 0, 0.38, 0); s(0.08, -0.13, 0.55, 0); s(0.08, 0.13, 0.55, 0);
   }
-  function cabinet(x, w, bottom = 0.72, top = 3.2) {
+  function cabinet(x, w, bottom = 0.95, top = 3.4) {
     solid(x, bottom, w, top - bottom, 'edge', { name: 'szafka' });
     box(w, top - bottom, 1.6, 0xa9cde8, x + w / 2, (top + bottom) / 2, -0.2);
     for (const lx of [x + 0.2, x + w - 0.2]) cyl(0.06, bottom, 0x7a9bb5, lx, bottom / 2, 0.45, { r2: 0.05 });
@@ -353,7 +353,7 @@ export function buildLevel(scene) {
   robot(115.5, 131, 2.6);
   pickup('candy', 118.3, 1.8); pickup('candy', 122.3, 1.8); pickup('candy', 126.7, 1.8); pickup('candy', 130.5, 1.4);
   // 10. ława + drzwi do kuchni
-  table(134, 6, { top: 0.85, thick: 0.15, color: 0xd9a066, d: 1.8, things: false });
+  table(134, 6, { top: 1.0, thick: 0.15, color: 0xd9a066, d: 1.8, things: false });
   pickup('candy', 137, 0.3); pickup('candy', 141.5, 0.6);
   door(147);
 

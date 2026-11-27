@@ -3,7 +3,8 @@ import { CFG } from './config.js';
 import { initTextures, paperOverlayDataURL } from './textures.js';
 import { buildLevel } from './level.js';
 import { Player } from './player.js';
-import { Character, MomHand } from './character.js';
+import { MomHand } from './character.js';
+import { Character } from './character3d.js';
 import { Sfx } from './audio.js';
 import { Fx } from './fx.js';
 import { Hud, fmtTime } from './hud.js';
@@ -116,7 +117,7 @@ function updateFail(dt) {
   const t = game.failT;
   const px = player.x, py = player.y;
   if (game.failKind === 'cry' && Math.random() < dt * 12) {
-    domi.headWorld(head); fx.tear(px + (Math.random() - 0.5) * 0.3, head.y - 0.05);
+    domi.headWorld(head); fx.tear(head.x + (Math.random() - 0.5) * 0.06, head.y - 0.02);
   }
   if (game.failKind === 'bored' && Math.random() < dt * 1.5) {
     domi.headWorld(head); fx.popup('Z', head.clone().add(new THREE.Vector3(0.3, 0.2, 0)), 'zzz', 1.4);
@@ -288,7 +289,7 @@ function frame() {
 
   domi.update(dt, player, rx, ry);
   domi.headWorld(head);
-  fx.update(dt, head.clone().add(new THREE.Vector3(0, 0.25, 0)));
+  fx.update(dt, head.clone().add(new THREE.Vector3(0, 0.40, 0)));
   updateCamera(dt, false, rx, ry);
   renderer.render(scene, camera);
 }

@@ -40,9 +40,9 @@ export const CFG = {
   cartGravity: 0.35,
 
   // --- hitboxy [szerokość, wysokość] ---
-  sizeNormal: [0.5, 1.2],
-  sizeRoll: [0.6, 0.65],  // musi być < 0.72 (prześwit pod szafką)
-  sizeCart: [1.3, 1.35],  // gwiazda = szeroki hitbox
+  sizeNormal: [0.5, 1.3],   // wysokość rysunku Domi (~1.32)
+  sizeRoll: [0.6, 0.65],  // musi być < 0.95 (prześwit pod szafką)
+  sizeCart: [1.3, 1.45],  // gwiazda = szeroki i wysoki hitbox (rysunek ~1.41)
   sizeSit: [0.7, 0.7],
 
   // --- pasek ENERGII (spada, gdy nie robisz akrobacji) ---
