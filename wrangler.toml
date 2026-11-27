@@ -1,3 +1,5 @@
 name = "boing"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-11-01"
+# prywatne konto Cloudflare — deploy trafia tylko tutaj
+account_id = "569d9ce8db7d1fde735846cc6ac48664"
