@@ -6,6 +6,9 @@
 set -e
 cd "$(dirname "$0")/.."
 
+# prywatne konto Cloudflare — deploy trafia tylko tutaj
+export CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-569d9ce8db7d1fde735846cc6ac48664}"
+
 MSG="${1:-Deploy $(date '+%Y-%m-%d %H:%M')}"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
