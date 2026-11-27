@@ -10,6 +10,8 @@ const TAU = Math.PI * 2;
 const HEIGHT = 1.36;                 // wysokość postaci w świecie (hitbox stojący = 1.3)
 const FACE_R = 0.85, FACE_L = -0.85;   // obrót wokół Y: przodem w bok i trochę do kamery
 const OUTLINE_CM = 1.1;              // grubość konturu w jednostkach modelu (cm)
+// kolor postaci: tekstura z Meshy w jasnym świetle salonu wychodzi blada (CFG.charSaturation/charBrightness)
+const LOOK_UNIFORMS = { uSat: { value: 1 }, uBright: { value: 1 } };
 const BALL_R = 0.34;                 // promień kulki (fikołek) w świecie przy skali 1
 
 const gltf = await new GLTFLoader().loadAsync(new URL('./art/girl.glb', import.meta.url).href);
@@ -47,6 +49,22 @@ const AIM_CHILD = {
   LeftArm: 'LeftForeArm', LeftForeArm: 'LeftHand', RightArm: 'RightForeArm', RightForeArm: 'RightHand',
   LeftUpLeg: 'LeftLeg', LeftLeg: 'LeftFoot', RightUpLeg: 'RightLeg', RightLeg: 'RightFoot',
 };
+
+// toon z podbitym nasyceniem i lekko przyciemniony (uniformy można zmieniać na żywo)
+function vividToon(map) {
+  const m = toon(0xffffff, map);
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, LOOK_UNIFORMS);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uSat;\nuniform float uBright;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+  {
+    float l = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+    diffuseColor.rgb = max(mix(vec3(l), diffuseColor.rgb, uSat), 0.0) * uBright;
+  }`);
+  };
+  return m;
+}
 
 function skinnedOutline() {
   const m = new THREE.MeshBasicMaterial({ color: 0x3d2c3a, side: THREE.BackSide });
@@ -102,7 +120,7 @@ export class Character {
     this.model.traverse((o) => {
       if (!o.isMesh) return;
       const map = o.material.map;
-      o.material = toon(0xffffff, map);
+      o.material = vividToon(map);
       o.castShadow = true;
       o.frustumCulled = false;
       const ol = new THREE.SkinnedMesh(o.geometry, skinnedOutline());
@@ -228,6 +246,8 @@ export class Character {
 
   update(dt, p, rx = p.x, ry = p.y) {
     this.t += dt;
+    LOOK_UNIFORMS.uSat.value = CFG.charSaturation;
+    LOOK_UNIFORMS.uBright.value = CFG.charBrightness;
     const st = p.state, speed = Math.abs(p.vx);
     this.rollT = st === 'roll' ? (this.prevState === 'roll' ? this.rollT + dt : 0) : 0;
     if (st !== this.prevState) {

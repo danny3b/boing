@@ -33,6 +33,10 @@ const GROUPS = [
     ['momentumPerTrick', 'Pęd za sztuczkę', 0.05, 0.5, 0.01],
     ['momentumDecay', 'Spadek pędu /s', 0, 1, 0.02],
   ]],
+  ['Wygląd postaci', [
+    ['charSaturation', 'Nasycenie kolorów', 0.5, 2.5, 0.05],
+    ['charBrightness', 'Jasność', 0.5, 1.4, 0.02],
+  ]],
   ['Energia', [
     ['energyDecay', 'Spadek energii /s', 0, 20, 0.5],
     ['trickEnergy', 'Energia za sztuczkę', 0, 40, 1],

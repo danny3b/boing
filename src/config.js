@@ -45,6 +45,10 @@ export const CFG = {
   sizeCart: [1.3, 1.45],  // gwiazda = szeroki i wysoki hitbox (rysunek ~1.41)
   sizeSit: [0.7, 0.7],
 
+  // --- wygląd postaci 3D ---
+  charSaturation: 1.55,   // 1 = kolory jak w teksturze
+  charBrightness: 0.9,
+
   // --- pasek ENERGII (spada, gdy nie robisz akrobacji) ---
   energyMax: 100,
   energyDecay: 6.5,       // na sekundę

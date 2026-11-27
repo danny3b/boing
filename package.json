@@ -4,7 +4,7 @@
   "private": true,
   "description": "BOING! — akrobatyczna platformówka w three.js",
   "scripts": {
-    "dev": "python3 scripts/devserver.py 8765",
+    "dev": "python3 scripts/devserver.py 8790",
     "build": "rm -rf dist && mkdir dist && cp -R index.html css src dist/",
     "preview": "npm run build && wrangler pages dev dist --port 8788",
     "pages": "npm run build && CLOUDFLARE_ACCOUNT_ID=569d9ce8db7d1fde735846cc6ac48664 wrangler pages deploy dist --branch main --commit-dirty=true",

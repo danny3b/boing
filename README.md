@@ -7,7 +7,7 @@ Akrobatyczna platformówka w three.js. Bohaterka nie umie chodzić — biega, sk
 Moduły ES nie działają z `file://`, potrzebny jest serwer:
 
 ```bash
-npm run dev        # http://localhost:8765
+npm run dev        # http://localhost:8790
 ```
 
 ## Sterowanie
@@ -36,7 +36,7 @@ npm run deploy -- "opis zmian"
 1. Wrzuć pliki animacji `.fbx` do `tools/model-src/anims/` (folder jest poza repozytorium).
    Rolę w grze rozpoznajemy po nazwie pliku: `run`, `jump`, `fall`, `roll`, `cartwheel`, `flip`,
    `idle`, `dizzy`/`stun`, `cry`/`sad`, `sit`/`bored`, `victory`/`cheer`, `stop`/`skid`, `walk`.
-2. `npm run dev` i otwórz http://localhost:8765/tools/convert-model.html — podgląd każdego klipu.
+2. `npm run dev` i otwórz http://localhost:8790/tools/convert-model.html — podgląd każdego klipu.
 3. „Pobierz girl.glb” i zapisz jako `src/art/girl.glb`.
 
 Animacje przenosimy po kierunkach kości, więc działają szkielety Mixamo (`mixamorig:*`) i Meshy.
