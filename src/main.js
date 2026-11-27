@@ -49,7 +49,7 @@ scene.add(sun, sun.target);
 
 const level = buildLevel(scene);
 const player = new Player(level);
-const zuzia = new Character(scene);
+const domi = new Character(scene);
 const hand = new MomHand(scene);
 const sfx = new Sfx();
 const fx = new Fx(scene, camera);
@@ -58,7 +58,7 @@ const input = new Input();
 
 const game = {
   mode: 'menu', // menu | playing | paused | failing | over | won
-  name: 'Zuzia',
+  name: 'Domi',
   time: 0, t: 0, hitstop: 0,
   failT: 0, failKind: null, failShown: false,
   camX: 0, camY: 1.6, look: 0, fov: 42,
@@ -78,7 +78,7 @@ function say(text, force = false) {
 // ---------- przebieg gry ----------
 function startGame() {
   const n = $('name-input').value.trim();
-  game.name = n ? n.slice(0, 14) : 'Zuzia';
+  game.name = n ? n.slice(0, 14) : 'Domi';
   hud.setName(game.name);
   document.querySelectorAll('.pname').forEach((el) => (el.textContent = game.name));
   sfx.init();
@@ -88,7 +88,7 @@ function startGame() {
 function restartLevel() {
   level.reset();
   player.resetLevel();
-  zuzia.reset();
+  domi.reset();
   fx.clear();
   hand.g.visible = false;
   Object.assign(game, { mode: 'playing', time: 0, hitstop: 0, failT: 0, failKind: null, failShown: false });
@@ -116,10 +116,10 @@ function updateFail(dt) {
   const t = game.failT;
   const px = player.x, py = player.y;
   if (game.failKind === 'cry' && Math.random() < dt * 12) {
-    zuzia.headWorld(head); fx.tear(px + (Math.random() - 0.5) * 0.3, head.y - 0.05);
+    domi.headWorld(head); fx.tear(px + (Math.random() - 0.5) * 0.3, head.y - 0.05);
   }
   if (game.failKind === 'bored' && Math.random() < dt * 1.5) {
-    zuzia.headWorld(head); fx.popup('Z', head.clone().add(new THREE.Vector3(0.3, 0.2, 0)), 'zzz', 1.4);
+    domi.headWorld(head); fx.popup('Z', head.clone().add(new THREE.Vector3(0.3, 0.2, 0)), 'zzz', 1.4);
   }
   const A = 1.8, B = 3.0, C = 3.5, D = 5.2;
   if (t > A) {
@@ -129,7 +129,7 @@ function updateFail(dt) {
     const grab = py + 1.25;
     if (t < B) { const k = (t - A) / (B - A); hy = grab + 9 * Math.pow(1 - k, 3); }
     else if (t < C) { hy = grab; curl = ((t - B) / (C - B)) * 0.9; }
-    else { const k = Math.min(1, (t - C) / (D - C)); hy = grab + 10 * k * k; curl = 0.9; zuzia.carry = hy - grab + 0.0001; }
+    else { const k = Math.min(1, (t - C) / (D - C)); hy = grab + 10 * k * k; curl = 0.9; domi.carry = hy - grab + 0.0001; }
     hand.g.position.y = hy;
     hand.curl(curl);
     if (t >= B && t - dt < B) { sfx.squeak(); say(game.failKind === 'cry' ? 'Chodź, kochanie, do pokoju...' : 'Skoro się nudzisz, to sprzątamy pokój!', true); }
@@ -169,7 +169,7 @@ const TRICK_NAMES = { fikolek: 'FIKOŁEK!', przewrot: 'PRZEWRÓT!', gwiazda: 'GW
 const CAUSE_QUIPS = { edge: Q.edge, lego: Q.lego, wall: Q.wall, robot: Q.robot, lava: Q.lava, plant: Q.plant, trip: Q.trip, head: Q.head, badLanding: Q.badLanding };
 
 function handle(e) {
-  zuzia.headWorld(head);
+  domi.headWorld(head);
   const px = player.x, py = player.y;
   switch (e.type) {
     case 'jump': sfx.jump(); fx.dust(px, py, 4, 0.6); break;
@@ -214,7 +214,7 @@ function onHurt(e) {
     fx.popup('-1 plasterek', head.clone().add(new THREE.Vector3(0, -0.4, 0)), 'bad');
     fx.shake(0.18, 0.25);
     fx.flash('hurt');
-    zuzia.starT = 1.2;
+    domi.starT = 1.2;
     say(pick(quips), true);
   } else {
     sfx.drum(); sfx.slide();
@@ -286,8 +286,8 @@ function frame() {
   const ry = player.prevY + (player.y - player.prevY) * a;
   if (player.skid && Math.random() < dt * 30) fx.dust(rx + Math.sign(player.vx) * 0.25, ry, 1, 0.7);
 
-  zuzia.update(dt, player, rx, ry);
-  zuzia.headWorld(head);
+  domi.update(dt, player, rx, ry);
+  domi.headWorld(head);
   fx.update(dt, head.clone().add(new THREE.Vector3(0, 0.25, 0)));
   updateCamera(dt, false, rx, ry);
   renderer.render(scene, camera);
@@ -324,4 +324,4 @@ $('name-input').focus();
 frame();
 
 // do debugowania z konsoli
-window.BOING = { game, player, level, CFG, renderer, scene, camera, zuzia, fx, updateCamera, startGame, restartLevel };
+window.BOING = { game, player, level, CFG, renderer, scene, camera, domi, fx, updateCamera, startGame, restartLevel };
