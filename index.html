@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BOING!</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Titan+One&display=swap&subset=latin-ext" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="paper"></div>
+  <div id="flash"></div>
+  <div id="labels"></div>
+
+  <div id="hud" class="hidden">
+    <div class="panel left">
+      <div class="name" id="hud-name">Zuzia</div>
+      <div class="plasters" id="hud-plasters"></div>
+      <div class="row">
+        <span class="label">Siniaki</span>
+        <div class="bar small"><div class="fill bruise" id="hud-bruise"></div></div>
+      </div>
+    </div>
+    <div class="panel center">
+      <div class="label big">ENERGIA</div>
+      <div class="bar energy" id="hud-energy-wrap"><div class="fill energy" id="hud-energy"></div></div>
+      <div class="row">
+        <span class="label">PĘD</span>
+        <div class="bar tiny"><div class="fill momentum" id="hud-momentum"></div></div>
+        <span class="combo" id="hud-combo"></span>
+      </div>
+    </div>
+    <div class="panel right">
+      <div class="timer" id="hud-time">0:00.0</div>
+      <div class="candies">🍬 <span id="hud-candies">0</span>/<span id="hud-candies-total">0</span></div>
+    </div>
+  </div>
+
+  <div id="overlay">
+    <div class="screen" id="screen-start">
+      <h1 class="logo">BOING!</h1>
+      <p class="sub">Świat 1: Domowa Dżungla</p>
+      <label class="name-label">Jak ma na imię bohaterka?
+        <input id="name-input" maxlength="14" value="Zuzia" autocomplete="off">
+      </label>
+      <div class="controls">
+        <div><kbd>←</kbd><kbd>→</kbd> / <kbd>A</kbd><kbd>D</kbd> bieg</div>
+        <div><kbd>Spacja</kbd> skok, w powietrzu <b>salto</b></div>
+        <div><kbd>Shift</kbd> <b>gwiazda</b> — zryw (szeroki hitbox!)</div>
+        <div><kbd>S</kbd> / <kbd>↓</kbd> <b>fikołek</b> — niska, ale słabo hamuje</div>
+        <div><kbd>S</kbd> przy lądowaniu = <b>przewrót</b> (zachowujesz pęd, ratuje krzywe salto)</div>
+        <div>trzymaj <kbd>Spacja</kbd> = wyższy skok · <kbd>S</kbd> w powietrzu = szybciej w dół</div>
+        <div><kbd>`</kbd> / <kbd>F2</kbd> panel strojenia sterowania</div>
+        <div><kbd>R</kbd> restart · <kbd>Esc</kbd> pauza · <kbd>M</kbd> dźwięk · <kbd>V</kbd> głos</div>
+      </div>
+      <p class="tip">Akrobacje w combo = większy <b>PĘD</b> (szybciej i wyżej, ale gorzej się hamuje).<br>
+        Pasek <b>ENERGII</b> ciągle spada — spokojnym spacerkiem nie dojdziesz do kuchni!</p>
+      <button id="btn-start">Biegnij!</button>
+    </div>
+
+    <div class="screen" id="screen-fail">
+      <h2 id="fail-title">Buuuu!</h2>
+      <p id="fail-text"></p>
+      <button id="btn-retry">Jeszcze raz! <small>(Enter)</small></button>
+    </div>
+
+    <div class="screen" id="screen-win">
+      <h2>Kuchnia! Obiad!</h2>
+      <p><span class="pname">Zuzia</span> dotarła cała (prawie).</p>
+      <div class="stars" id="win-stars">★★★</div>
+      <div class="stats" id="win-stats"></div>
+      <button id="btn-again">Jeszcze raz! <small>(Enter)</small></button>
+    </div>
+
+    <div class="screen" id="screen-pause">
+      <h2>Pauza</h2>
+      <p><span class="pname">Zuzia</span> łapie oddech... ale tylko na chwilę.</p>
+      <button id="btn-resume">Dalej!</button>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
